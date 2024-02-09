@@ -1,0 +1,86 @@
+service: vtru-studio-lambda-thumb-image
+frameworkVersion: '3'
+
+provider:
+    name: aws
+    stage: qa
+    runtime: nodejs18.x
+    memorySize: 1024
+    timeout: 300
+    iamRoleStatements:
+        - Effect: Allow
+          Action:
+              - s3:*
+          Resource: '*'
+
+custom:
+    bucket: vitruveo-studio-${opt:stage, 'qa'}-assets
+
+functions:
+    postprocess:
+        handler: handler.postprocess
+        events:
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectCreated:*
+                  rules:
+                      - suffix: jpeg
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectCreated:*
+                  rules:
+                      - suffix: png
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectCreated:*
+                  rules:
+                      - suffix: gif
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectCreated:*
+                  rules:
+                      - suffix: svg
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectCreated:*
+                  rules:
+                      - suffix: webp
+                  existing: true
+
+    postdelete:
+        handler: handler.postdelete
+        events:
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectRemoved:*
+                  rules:
+                      - suffix: jpeg
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectRemoved:*
+                  rules:
+                      - suffix: png
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectRemoved:*
+                  rules:
+                      - suffix: gif
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectRemoved:*
+                  rules:
+                      - suffix: svg
+                  existing: true
+            - s3:
+                  bucket: ${self:custom.bucket}
+                  event: s3:ObjectRemoved:*
+                  rules:
+                      - suffix: webp
+                  existing: true
