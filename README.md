@@ -1,0 +1,1 @@
+# vtru-studio-lambda-thumb-image
