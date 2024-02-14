@@ -86,23 +86,28 @@ module.exports.postprocess = async (event) => {
 };
 
 const deleteThumb = async ({ filename, bucket, region }) => {
-    console.log(
-        `[DeleteThumb] Starting thumbnail deletion. Filename: ${filename}, Bucket: ${bucket}, Region: ${region}`
-    );
+    try {
+        console.log(
+            `[DeleteThumb] Starting thumbnail deletion. Filename: ${filename}, Bucket: ${bucket}, Region: ${region}`
+        );
 
-    const parsedFileName = parseFileName(filename);
-    const thumbFilename = `${parsedFileName.name}_thumb.jpg`;
-    const s3 = new s3client.S3Client({ region });
-    await s3.send(
-        new s3client.DeleteObjectCommand({
-            Bucket: bucket,
-            Key: thumbFilename,
-        })
-    );
+        const parsedFileName = parseFileName(filename);
+        const thumbFilename = `${parsedFileName.name}_thumb.jpg`;
+        const endFileName = join(parsedFileName.dir, thumbFilename);
+        const s3 = new s3client.S3Client({ region });
+        await s3.send(
+            new s3client.DeleteObjectCommand({
+                Bucket: bucket,
+                Key: endFileName,
+            })
+        );
 
-    console.log(
-        `[DeleteThumb] Thumbnail deletion completed. Filename: ${filename}, Bucket: ${bucket}, Region: ${region}`
-    );
+        console.log(
+            `[DeleteThumb] Thumbnail deletion completed. Filename: ${endFileName}, Bucket: ${bucket}, Region: ${region}`
+        );
+    } catch (error) {
+        console.log(error);
+    }
 };
 
 module.exports.postdelete = async (event) => {
