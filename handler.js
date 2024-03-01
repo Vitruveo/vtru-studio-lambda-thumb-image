@@ -1,7 +1,9 @@
+/* eslint-disable no-await-in-loop */
 const { parse: parseFileName, join } = require('path');
 const s3client = require('@aws-sdk/client-s3');
 const fs = require('fs/promises');
 const sharp = require('sharp');
+const path = require('path');
 
 const resizeImage = async (inputFile, outputFile) => {
     await sharp(inputFile).jpeg({ quality: 1 }).toFile(outputFile);
@@ -18,13 +20,17 @@ const downloadFromS3 = async ({ file, bucket, region }) => {
             Key: file,
         })
     );
+
     const endFileName = join('/', 'tmp', file);
     const parsedFileName = parseFileName(endFileName);
     await fs.mkdir(parsedFileName.dir, { recursive: true });
     await fs.writeFile(join('/', 'tmp', file), data.Body);
+
     console.log(
         `[DownloadFromS3] Download from S3 completed. File: ${file}, Bucket: ${bucket}, Region: ${region}`
     );
+
+    return data.Metadata;
 };
 
 const uploadToS3 = async ({ file, key, bucket, region }) => {
@@ -45,22 +51,117 @@ const uploadToS3 = async ({ file, key, bucket, region }) => {
     );
 };
 
+const resizeOriginalImage = async (
+    { inputFile, bucket, region, filename, metadata },
+    quality = 99
+) => {
+    let stats = await fs.stat(inputFile);
+    let currentQuality = quality;
+    let changeFormat = '';
+    let deleted = false;
+    const tempFile = `${inputFile}.tmp`;
+
+    const originalFormat = path.extname(inputFile).slice(1);
+    const maxSize = Number(metadata?.maxsize) * 1000000;
+
+    console.log('stats:', stats);
+    console.log('metadata maxSize:', metadata, maxSize);
+    console.log('inputFile:', inputFile, 'filename:', filename);
+
+    while (stats.size > maxSize) {
+        console.log(
+            'size',
+            stats.size,
+            'quality:',
+            currentQuality,
+            'originalFormat:',
+            originalFormat
+        );
+        if (originalFormat === 'png') {
+            if (!deleted) {
+                const s3 = new s3client.S3Client({ region });
+                await s3.send(
+                    new s3client.DeleteObjectCommand({
+                        Bucket: bucket,
+                        Key: filename,
+                    })
+                );
+                deleted = true;
+            }
+            await sharp(inputFile)
+                .jpeg({
+                    quality: currentQuality,
+                    progressive: true,
+                })
+                .toFile(tempFile);
+
+            changeFormat = 'jpeg';
+        } else {
+            await sharp(inputFile)
+                .toFormat(originalFormat, {
+                    quality: currentQuality,
+                    progressive: true,
+                })
+                .toFile(tempFile);
+        }
+
+        stats = await fs.stat(tempFile);
+
+        if (stats.size > maxSize) {
+            currentQuality -= 1;
+            if (currentQuality === 0) {
+                throw new Error('Unable to reduce file size under 10MB');
+            }
+        } else {
+            const parsedFileName = parseFileName(filename);
+
+            const newFileName = changeFormat?.length
+                ? `${parsedFileName.name}.${changeFormat}`
+                : filename;
+
+            const pathFileName = changeFormat?.length
+                ? join('/', 'tmp', `${parsedFileName.name}.${changeFormat}`)
+                : join('/', 'tmp', filename);
+
+            console.log('newFileName:', newFileName);
+            console.log('pathFileName:', pathFileName);
+
+            await fs.rename(tempFile, pathFileName);
+
+            const endFileName = join(
+                parsedFileName.dir,
+                `${parsedFileName.name}.${changeFormat?.length ? changeFormat : originalFormat}`
+            );
+
+            await uploadToS3({
+                file: newFileName,
+                key: endFileName,
+                bucket,
+                region,
+            });
+        }
+    }
+};
+
 const generateThumb = async ({ filename, bucket, region }) => {
     console.log(
         `[GenerateThumb] Starting thumbnail generation. Filename: ${filename}, Bucket: ${bucket}, Region: ${region}`
     );
 
-    const parsedFileName = parseFileName(filename);
-    const thumbFilename = `${parsedFileName.name}_thumb.jpg`;
-    await downloadFromS3({
+    const metadata = await downloadFromS3({
         file: filename,
         bucket,
         region,
     });
+
+    const parsedFileName = parseFileName(filename);
+    const thumbFilename = `${parsedFileName.name}_thumb.jpg`;
+
     await resizeImage(
         join('/', 'tmp', filename),
         join('/', 'tmp', thumbFilename)
     );
+
     const endFileName = join(parsedFileName.dir, thumbFilename);
     await uploadToS3({
         file: thumbFilename,
@@ -68,6 +169,18 @@ const generateThumb = async ({ filename, bucket, region }) => {
         bucket,
         region,
     });
+
+    const originalFile = join('/', 'tmp', filename);
+
+    if (metadata?.maxsize)
+        await resizeOriginalImage({
+            inputFile: originalFile,
+            bucket,
+            region,
+            filename,
+            metadata,
+        });
+
     console.log(
         `[GenerateThumb] Thumbnail generation completed. Filename: ${filename}, Bucket: ${bucket}, Region: ${region}`
     );
