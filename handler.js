@@ -1,4 +1,5 @@
 /* eslint-disable no-await-in-loop */
+const axios = require('axios');
 const { parse: parseFileName, join } = require('path');
 const s3client = require('@aws-sdk/client-s3');
 const fs = require('fs/promises');
@@ -49,6 +50,23 @@ const uploadToS3 = async ({ file, key, bucket, region }) => {
     console.log(
         `[UploadToS3] Upload to S3 completed. File: ${file}, Key: ${key}, Bucket: ${bucket}, Region: ${region}`
     );
+};
+
+const notify = async ({ filename, size }) => {
+    const url = `${process.env.NOTIFY_API_URL}/assets/notify/file`;
+    const data = { filename, size };
+
+    console.log('url:', url);
+
+    console.log({ data });
+
+    try {
+        const response = await axios.put(url, data);
+        console.log(`Status: ${response.status}`);
+        console.log('Body: ', response.data);
+    } catch (error) {
+        console.error(`Error: ${error}`);
+    }
 };
 
 const resizeOriginalImage = async (
@@ -141,6 +159,8 @@ const resizeOriginalImage = async (
             });
         }
     }
+
+    await notify({ filename, size: stats.size });
 };
 
 const generateThumb = async ({ filename, bucket, region }) => {

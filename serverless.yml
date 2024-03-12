@@ -19,6 +19,8 @@ custom:
 functions:
     postprocess:
         handler: handler.postprocess
+        environment:
+            NOTIFY_API_URL: ${param:NOTIFY_API_URL}
         events:
             - s3:
                   bucket: ${self:custom.bucket}
