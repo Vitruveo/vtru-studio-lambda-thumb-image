@@ -7,7 +7,9 @@ const sharp = require('sharp');
 const path = require('path');
 
 const resizeImage = async (inputFile, outputFile) => {
-    await sharp(inputFile).jpeg({ quality: 1 }).toFile(outputFile);
+    await sharp(inputFile)
+        .jpeg({ quality: 50, progressive: true })
+        .toFile(outputFile);
 };
 
 const downloadFromS3 = async ({ file, bucket, region }) => {
@@ -52,9 +54,10 @@ const uploadToS3 = async ({ file, key, bucket, region }) => {
     );
 };
 
-const notify = async ({ filename, size }) => {
+const notify = async ({ filename, size, newFilename }) => {
     const url = `${process.env.NOTIFY_API_URL}/assets/notify/file`;
     const data = { filename, size };
+    if (newFilename && newFilename.length) data.newFilename = newFilename;
 
     console.log('url:', url);
 
@@ -80,6 +83,7 @@ const resizeOriginalImage = async (
     const tempFile = `${inputFile}.tmp`;
 
     const originalFormat = path.extname(inputFile).slice(1);
+    let endFileName = '';
     const maxSize = Number(metadata?.maxsize) * 1000000;
 
     console.log('stats:', stats);
@@ -133,7 +137,7 @@ const resizeOriginalImage = async (
         } else {
             const parsedFileName = parseFileName(filename);
 
-            const newFileName = changeFormat?.length
+            const newFilename = changeFormat?.length
                 ? `${parsedFileName.name}.${changeFormat}`
                 : filename;
 
@@ -141,18 +145,19 @@ const resizeOriginalImage = async (
                 ? join('/', 'tmp', `${parsedFileName.name}.${changeFormat}`)
                 : join('/', 'tmp', filename);
 
-            console.log('newFileName:', newFileName);
-            console.log('pathFileName:', pathFileName);
-
             await fs.rename(tempFile, pathFileName);
 
-            const endFileName = join(
+            endFileName = join(
                 parsedFileName.dir,
                 `${parsedFileName.name}.${changeFormat?.length ? changeFormat : originalFormat}`
             );
 
+            console.log('newFilename:', newFilename);
+            console.log('pathFileName:', pathFileName);
+            console.log('endFileName:', endFileName);
+
             await uploadToS3({
-                file: newFileName,
+                file: newFilename,
                 key: endFileName,
                 bucket,
                 region,
@@ -160,7 +165,7 @@ const resizeOriginalImage = async (
         }
     }
 
-    await notify({ filename, size: stats.size });
+    await notify({ filename, size: stats.size, newFilename: endFileName });
 };
 
 const generateThumb = async ({ filename, bucket, region }) => {
