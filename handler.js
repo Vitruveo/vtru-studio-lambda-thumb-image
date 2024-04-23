@@ -54,23 +54,27 @@ const uploadToS3 = async ({ file, key, bucket, region }) => {
     );
 };
 
-const notify = async ({ filename, size, newFilename }) => {
-    const url = `${process.env.NOTIFY_API_URL}/assets/notify/file`;
-    const data = { filename, size };
-    if (newFilename && newFilename.length) data.newFilename = newFilename;
+const notify = ({ filename, size, newFilename }) =>
+    new Promise((resolve, reject) => {
+        const url = `${process.env.NOTIFY_API_URL}/assets/notify/file`;
+        const data = { filename, size };
+        if (newFilename && newFilename.length) data.newFilename = newFilename;
 
-    console.log('url:', url);
+        console.log('url:', url);
+        console.log({ data });
 
-    console.log({ data });
-
-    try {
-        const response = await axios.put(url, data);
-        console.log(`Status: ${response.status}`);
-        console.log('Body: ', response.data);
-    } catch (error) {
-        console.error(`Error: ${error}`);
-    }
-};
+        setTimeout(async () => {
+            try {
+                const response = await axios.put(url, data);
+                console.log(`Status: ${response.status}`);
+                console.log('Body: ', response.data);
+                resolve(response);
+            } catch (error) {
+                console.error(`Error: ${error}`);
+                reject(error);
+            }
+        }, 2000);
+    });
 
 const resizeOriginalImage = async (
     { inputFile, bucket, region, filename, metadata },
